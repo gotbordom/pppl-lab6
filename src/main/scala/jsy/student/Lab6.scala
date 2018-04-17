@@ -35,8 +35,15 @@ object Lab6 extends jsy.util.JsyApplication with Lab6Like {
 
   /*** Exercises with Continuations ***/
 
+  // Note we are doing in order traversal so we go to the bottom left then backtrack to the right
   def foldLeftAndThen[A,B](t: Tree)(z: A)(f: (A,Int) => A)(sc: A => B): B = {
-    def loop(acc: A, t: Tree)(sc: A => B): B = ???
+    def loop(acc: A, t: Tree)(sc: A => B): B = t match {
+      case Empty => sc(z)  // I am done scanning the tree - so evaulate the "AndThen" part also known as the continuations
+      case Node(l,d,r) => foldLeftAndThen(l)(z)(f)( (a: A) => {
+        val a2 = f(a,d)
+        foldLeftAndThen(r)(a2)(f)(sc)
+      })
+    }
     loop(z, t)(sc)
   }
 
@@ -101,9 +108,34 @@ object Lab6 extends jsy.util.JsyApplication with Lab6Like {
       case _ => Failure("expected intersect", next)
     }
 
-    def intersect(next: Input): ParseResult[RegExpr] = ???
+    def intersect(next: Input): ParseResult[RegExpr] = concat(next) match {
+      case Success(r,next) => {
+        def intersects(acc: RegExpr, next: Input): ParseResult[RegExpr] =
+          if(next.atEnd) Success(acc,next)
+          else (next.first,next.rest) match {
+            case ('&',next) => concat(next) match {
+              case Success(r,next) => intersects(RIntersect(acc,r),next)
+              case _ => Failure("expected concat",next)
+            }
+            case _ => Success(acc,next)
+          }
+        intersects(r,next)
+      }
+      case _ => Failure("expected concat",next)
+    }
 
-    def concat(next: Input): ParseResult[RegExpr] = ???
+    def concat(next: Input): ParseResult[RegExpr] = not(next) match {
+      case Success(r,next) => {
+        def concats(acc: RegExpr, next: Input): ParseResult[RegExpr] =
+          if(next.atEnd) Success(acc,next)
+          else not(next) match {
+            case Success(r,next) => concats(RConcat(acc,r),next)
+            case _ => Success(acc,next)
+          }
+        concats(r,next)
+      }
+      //case _ => Failure()
+    }
 
     def not(next: Input): ParseResult[RegExpr] = ???
 
@@ -128,26 +160,26 @@ object Lab6 extends jsy.util.JsyApplication with Lab6Like {
     */
   def test(re: RegExpr, chars: List[Char])(sc: List[Char] => Boolean): Boolean = (re, chars) match {
     /* Basic Operators */
-    case (RNoString, _) => ???
-    case (REmptyString, _) => ???
-    case (RSingle(_), Nil) => ???
-    case (RSingle(c1), c2 :: t) => ???
-    case (RConcat(re1, re2), _) => ???
-    case (RUnion(re1, re2), _) => ???
+    case (RNoString, _) => false
+    case (REmptyString, _) => sc(chars)
+    case (RSingle(_), Nil) => false
+    case (RSingle(c1), c2 :: t) => if (c1==c2) sc(t) else false
+    case (RConcat(re1, re2), _) =>  test(re1, chars)({ next => test(re2, next)(sc) }) // In this case since we are forcing a associativity - re1 must pass then re2 must pass?
+    case (RUnion(re1, re2), _) => test(re1, chars)(sc) || test(re2, chars)(sc)        // So in this case When doing a union either may pass?
     case (RStar(re1), _) => ???
 
     /* Extended Operators */
     case (RAnyChar, Nil) => false
-    case (RAnyChar, _ :: t) => ???
+    case (RAnyChar, _ :: t) => sc(t)
     case (RPlus(re1), _) => ???
-    case (ROption(re1), _) => ???
+    case (ROption(re1), _) => if (chars.isEmpty) true else test(re1,chars)(sc)
 
     /***** Extra Credit Cases *****/
     case (RIntersect(re1, re2), _) => ???
     case (RNeg(re1), _) => ???
   }
 
-  def retest(re: RegExpr, s: String): Boolean = test(re, s.toList) { chars => ??? }
+  def retest(re: RegExpr, s: String): Boolean = test(re, s.toList) { chars => chars.isEmpty }
 
 
   /*******************************/
