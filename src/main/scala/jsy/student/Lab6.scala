@@ -134,13 +134,30 @@ object Lab6 extends jsy.util.JsyApplication with Lab6Like {
           }
         concats(r,next)
       }
-      //case _ => Failure()
+      //case _   => failure()
     }
 
-    def not(next: Input): ParseResult[RegExpr] = ???
+    def not(next: Input): ParseResult[RegExpr] = (next.first, next.rest) match {
+      case ('-',nrest) => not(nrest) match {
+        case Success(r,next) => Success(RNeg(r),next)
+        //case _ => Failure() // Failure cases?
+      }
+    }
 
-    def star(next: Input): ParseResult[RegExpr] = ???
-
+    def star(next: Input): ParseResult[RegExpr] = atom(next) match {
+      case Success(r,next) => {
+        def stars(acc: RegExpr, next: Input): ParseResult[RegExpr] =
+          if (next.atEnd) Success(acc,next)
+          else (next.first, next.rest) match {
+            case ('*',next) => stars(RStar(acc),next)
+            case ('+',next) => stars(RPlus(acc),next)
+            case ('?',next) => stars(ROption(acc),next)
+            case _ => Success(acc,next)
+          }
+        stars(r,next)
+      }
+      case _ => Failure("expected atom",next)
+    }
     /* This set is useful to check if a Char is/is not a regular expression
        meta-language character.  Use delimiters.contains(c) for a Char c. */
     val delimiters = Set('|', '&', '~', '*', '+', '?', '!', '#', '.', '(', ')')
@@ -166,7 +183,9 @@ object Lab6 extends jsy.util.JsyApplication with Lab6Like {
     case (RSingle(c1), c2 :: t) => if (c1==c2) sc(t) else false
     case (RConcat(re1, re2), _) =>  test(re1, chars)({ next => test(re2, next)(sc) }) // In this case since we are forcing a associativity - re1 must pass then re2 must pass?
     case (RUnion(re1, re2), _) => test(re1, chars)(sc) || test(re2, chars)(sc)        // So in this case When doing a union either may pass?
-    case (RStar(re1), _) => ???
+    case (RStar(re1), _) => sc(chars) || test(re1, chars)({ next => if (next.size < chars.size) test(RStar(re1), next)(sc) else false })
+
+
 
     /* Extended Operators */
     case (RAnyChar, Nil) => false
